@@ -48,8 +48,7 @@ class RobotController(Node):
         self.error_thresh = 0.5
 
         # ---- TASK 1.2: publisher that drives the robot ---------------------
-        # model.sdf's diff-drive plugin subscribes to /cmd_vel; sim.launch.py
-        # bridges it. Reliable QoS: commands, not sensor samples.
+
         self.move_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.move_timer = self.create_timer(self.CMD_PERIOD, self.send_move_cmd)
 
