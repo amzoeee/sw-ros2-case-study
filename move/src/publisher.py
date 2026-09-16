@@ -66,6 +66,14 @@ class RobotController(Node):
              (math.pi * self.ARC_RADIUS) / self.LINEAR_SPEED),
         ]
 
+        # rationale: 
+        # a half circle is super easy to parametrize, and even easier to tune.  
+        # since this is dead reckoning and we have to tune it, simple is better. 
+        # note: b/c the robot is diffy drive we'll need to rotate at the start. 
+        # unfortunately this is not very time efficient but 
+        # its better that it works than it not working :) 
+
+        # vars needed to track execution (two segments). 
         self.segment_index = 0
         self.segment_elapsed = 0.0
 
@@ -111,6 +119,7 @@ class RobotController(Node):
         """Publish one Twist for the current segment of self.path."""
         cmd = Twist()
 
+        # execute segment [0] then segment [1]
         if self.segment_index < len(self.path):
             linear, angular, duration = self.path[self.segment_index]
             cmd.linear.x = linear
