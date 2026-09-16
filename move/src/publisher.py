@@ -66,9 +66,11 @@ class RobotController(Node):
         super().__init__('robot_controller')
 
         # Publish to /error when the position delta exceeds this (TASK 2.3).
-        # 0.5 m is a quarter of the 2.0 m chassis: close enough that the robot
-        # is still roughly where we think it is, far enough to ignore noise.
-        self.error_thresh = 0.5
+        # 1.0m is 1/2 of robot chassis length -- quite an error
+        # however note that position from imu is quitee inaccurate
+        # due to imu drift and noise :( 
+        # so /error will still likely be published to a every loop. 
+        self.error_thresh = 1.0
 
         # ---- TASK 1.2: publisher that drives the robot ---------------------
         self.move_pub = self.create_publisher(Twist, '/cmd_vel', 10)
