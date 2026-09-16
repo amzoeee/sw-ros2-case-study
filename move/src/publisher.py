@@ -31,14 +31,24 @@ class RobotController(Node):
     """Drives the robot, tracks its position error, and flags obstacles."""
 
     # ---- TASK 1.3 tuning constants -----------------------------------------
-    # Arc from the origin facing +x, centre (0, -R): x = R sin(t),
-    # y = -R(1 - cos(t)), t = s / R. Defaults clear the barrier corner
-    # (x 5.75, y -3) by ~1.3 m against a 0.6 m chassis half-width.
-    ARC_LENGTH = 9.0        # [m] total arc length to drive
-    ARC_RADIUS = 6.0        # [m] turning radius; smaller = tighter arc
-    TURN_SIGN = -1.0        # -1 turns toward -y (away from the pillar at +2.5)
+    # Arc from the origin facing +x, centre (0, +R) for a left turn:
+    # x = R sin(t), y = R(1 - cos(t)), t = s / R.
+    #
+    # A half circle fixes the sweep at pi, so ARC_RADIUS becomes the knob and
+    # ARC_LENGTH follows from it. R = 5.75 gives an 18.1 m arc, twice the
+    # previous 9.0 m, ending back on the y axis at (0, 11.5) facing -x.
+    #
+    # NOTE: this left-hand arc passes 0.60 m from the pillar at (4, 2.5),
+    # which needs 0.9 m (0.6 m chassis half-width + 0.3 m pillar). It clips.
+    # No radius fixes that turning left: R >= 7 clears the pillar but cuts
+    # into the barrier, and only R ~ 3 clears both -- and that circle never
+    # reaches the barrier at all. TURN_SIGN = -1 has no pillar on that side.
+    ARC_SWEEP = math.pi     # [rad] half circle
+    ARC_RADIUS = 5.75       # [m] turning radius; smaller = tighter arc
+    ARC_LENGTH = ARC_RADIUS * ARC_SWEEP   # [m] total arc length to drive
+    TURN_SIGN = 1.0         # +1 turns toward +y
     LINEAR_SPEED = 0.5      # [m/s] forward speed along the arc
-    CMD_PERIOD = 0.1        # [ns] command period
+    CMD_PERIOD = 0.1        # [s] command period; 10 Hz is plenty for a diff drive
 
     def __init__(self):
         super().__init__('robot_controller')
@@ -53,17 +63,19 @@ class RobotController(Node):
         self.move_timer = self.create_timer(self.CMD_PERIOD, self.send_move_cmd)
 
         # ---- TASK 1.3: the path you chose ----------------------------------
-        # A single constant-curvature arc, open loop, turning toward -y.
-        # - the pillar is located in +y 
+        # A half circle of constant curvature, open loop, turning toward +y.
         #
-        # Why arc length, not time: curvature 1/R fixes the shape and
-        # ARC_LENGTH fixes how far along it we go, both independent of speed.
-        # One arc rounds the -y end but stops short of crossing x = 6.25;
-        # a second segment would be needed to finish (radii that do both in
-        # one arc span ~0.05 m, too brittle to tune).
+        # Why an arc: driving +x hits the barrier at x = 6 (spans y -3..3), so
+        # the robot has to round one end. A diff drive holds an arc exactly
+        # when v and omega are constant, so this costs no per-step control
+        # effort, and chaining arcs (omega = 0 gives a straight) covers any
+        # longer route.
         #
-        # Open loop: s += v * dt is dead reckoning. 
-        # realistically should use odom, other sensor feedback... 
+        # Why arc length, not time: curvature 1/R fixes the shape and the
+        # sweep fixes how far along it we go, both independent of speed.
+        #
+        # Open loop: s += v * dt dead-reckons off our own command and ignores
+        # slip. TASK 2's odometry is what closes that gap.
         self.path = {
             'radius': self.ARC_RADIUS,
             'turn_sign': self.TURN_SIGN,
@@ -103,7 +115,7 @@ class RobotController(Node):
         # self.obstacle_pub = self.create_publisher(
         #     PointCloud2, '/obstacle_cloud', 10)
 
-        sweep_deg = math.degrees(self.ARC_LENGTH / self.ARC_RADIUS)
+        sweep_deg = math.degrees(self.ARC_SWEEP)
         turn = 'right' if self.TURN_SIGN < 0 else 'left'
         self.get_logger().info(
             f'robot_controller started: {self.ARC_LENGTH:.1f} m arc, '
