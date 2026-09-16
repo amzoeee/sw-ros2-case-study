@@ -31,24 +31,17 @@ class RobotController(Node):
     """Drives the robot, tracks its position error, and flags obstacles."""
 
     # ---- TASK 1.3 tuning constants -----------------------------------------
-    # Arc from the origin facing +x, centre (0, +R) for a left turn:
-    # x = R sin(t), y = R(1 - cos(t)), t = s / R.
-    #
-    # A half circle fixes the sweep at pi, so ARC_RADIUS becomes the knob and
-    # ARC_LENGTH follows from it. R = 5.75 gives an 18.1 m arc, twice the
-    # previous 9.0 m, ending back on the y axis at (0, 11.5) facing -x.
-    #
-    # NOTE: this left-hand arc passes 0.60 m from the pillar at (4, 2.5),
-    # which needs 0.9 m (0.6 m chassis half-width + 0.3 m pillar). It clips.
-    # No radius fixes that turning left: R >= 7 clears the pillar but cuts
-    # into the barrier, and only R ~ 3 clears both -- and that circle never
-    # reaches the barrier at all. TURN_SIGN = -1 has no pillar on that side.
-    ARC_SWEEP = math.pi     # [rad] half circle
-    ARC_RADIUS = 5.75       # [m] turning radius; smaller = tighter arc
-    ARC_LENGTH = ARC_RADIUS * ARC_SWEEP   # [m] total arc length to drive
-    TURN_SIGN = 1.0         # +1 turns toward +y
+    # Robot starts at the origin facing +x, square to the barrier (x = 6,
+    # spanning y -3..3). The route is a 90 deg pivot to -y, then a half circle
+    # left about centre (ARC_RADIUS, 0):
+    #     (x, y) = R(1 + cos t), R sin t,   t: pi -> 2pi
+    # It leaves (0, 0) heading -y along the near face, bottoms out at (R, -R)
+    # past the barrier's -y end, and finishes at (2R, 0) heading +y along the
+    # far face. R = 5.0 keeps the path 4.8 m clear of the barrier's end.
+    ARC_RADIUS = 5.0        # [m] half-circle radius
     LINEAR_SPEED = 0.5      # [m/s] forward speed along the arc
-    CMD_PERIOD = 0.1        # [s] command period; 10 Hz is plenty for a diff drive
+    PIVOT_RATE = 0.5        # [rad/s] yaw rate of the in-place pivot
+    CMD_PERIOD = 0.1        # [s] command period
 
     def __init__(self):
         super().__init__('robot_controller')
@@ -58,32 +51,23 @@ class RobotController(Node):
         self.error_thresh = 0.5
 
         # ---- TASK 1.2: publisher that drives the robot ---------------------
-
         self.move_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         self.move_timer = self.create_timer(self.CMD_PERIOD, self.send_move_cmd)
 
         # ---- TASK 1.3: the path you chose ----------------------------------
-        # A half circle of constant curvature, open loop, turning toward +y.
-        #
-        # Why an arc: driving +x hits the barrier at x = 6 (spans y -3..3), so
-        # the robot has to round one end. A diff drive holds an arc exactly
-        # when v and omega are constant, so this costs no per-step control
-        # effort, and chaining arcs (omega = 0 gives a straight) covers any
-        # longer route.
-        #
-        # Why arc length, not time: curvature 1/R fixes the shape and the
-        # sweep fixes how far along it we go, both independent of speed.
-        #
-        # Open loop: s += v * dt dead-reckons off our own command and ignores
-        # slip. TASK 2's odometry is what closes that gap.
-        self.path = {
-            'radius': self.ARC_RADIUS,
-            'turn_sign': self.TURN_SIGN,
-            'length': self.ARC_LENGTH,
-        }
+        # Segments driven open loop, in order: (v [m/s], omega [rad/s], t [s]).
+        # Negative omega turns right, positive turns left.
+        self.path = [
+            # Pivot in place 90 deg right, from facing +x to facing -y.
+            (0.0, -self.PIVOT_RATE, (math.pi / 2.0) / self.PIVOT_RATE),
+            # Half circle left around the barrier's -y end.
+            (self.LINEAR_SPEED,
+             self.LINEAR_SPEED / self.ARC_RADIUS,
+             (math.pi * self.ARC_RADIUS) / self.LINEAR_SPEED),
+        ]
 
-        # Commanded arc length so far [m].
-        self.distance_travelled = 0.0
+        self.segment_index = 0
+        self.segment_elapsed = 0.0
 
         # ---- TASK 2.2: subscriber for the robot's 6D pose ------------------
         # One of the two onboard sensors reports 6D data. Find it (TASK 2.1).
@@ -115,30 +99,28 @@ class RobotController(Node):
         # self.obstacle_pub = self.create_publisher(
         #     PointCloud2, '/obstacle_cloud', 10)
 
-        sweep_deg = math.degrees(self.ARC_SWEEP)
-        turn = 'right' if self.TURN_SIGN < 0 else 'left'
         self.get_logger().info(
-            f'robot_controller started: {self.ARC_LENGTH:.1f} m arc, '
-            f'radius {self.ARC_RADIUS:.1f} m ({sweep_deg:.0f} deg {turn}) '
-            f'at {self.LINEAR_SPEED:.2f} m/s')
+            f'robot_controller started: pivot 90 deg right, then a '
+            f'{math.pi * self.ARC_RADIUS:.1f} m half circle of radius '
+            f'{self.ARC_RADIUS:.1f} m at {self.LINEAR_SPEED:.2f} m/s')
 
     # -----------------------------------------------------------------------
     # TASK 1.2 -- publish a velocity command
     # -----------------------------------------------------------------------
     def send_move_cmd(self):
-        """Publish one Twist that moves the robot along self.path."""
+        """Publish one Twist for the current segment of self.path."""
         cmd = Twist()
 
-        if self.distance_travelled < self.path['length']:
-            # omega = v / R: one radian of heading per R metres travelled.
-            cmd.linear.x = self.LINEAR_SPEED
-            cmd.angular.z = (
-                self.path['turn_sign'] * self.LINEAR_SPEED / self.path['radius'])
+        if self.segment_index < len(self.path):
+            linear, angular, duration = self.path[self.segment_index]
+            cmd.linear.x = linear
+            cmd.angular.z = angular
 
-            self.distance_travelled += self.LINEAR_SPEED * self.CMD_PERIOD
+            self.segment_elapsed += self.CMD_PERIOD
+            if self.segment_elapsed >= duration:
+                self.segment_index += 1
+                self.segment_elapsed = 0.0
 
-        # after distance is traveled, need to publish velocity 
-        #  of 0 to stop robot
         self.move_pub.publish(cmd)
 
     # -----------------------------------------------------------------------
