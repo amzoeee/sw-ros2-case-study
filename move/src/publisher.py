@@ -98,8 +98,9 @@ class RobotController(Node):
         self.segment_elapsed = 0.0
 
         # ---- TASK 2.2: subscriber for the robot's 6D pose ------------------
-        # /imu is the 6D sensor: 3-axis accelerometer + 3-axis gyro. It carries
-        # no position, so position is dead reckoned from it in on_robot_pos.
+        # note /imu does not give position directly
+        # need to double integrate accel. to get pos
+        # which is often veryyyyyy noisy and not particularly reliable 
         self.robot_pos_sub = self.create_subscription(
             Imu,
             '/imu',
@@ -108,9 +109,7 @@ class RobotController(Node):
         )
 
         # ---- TASK 2.3: where the measured-vs-actual error goes -------------
-        # "actual" is the simulator's odometry. Strictly it is wheel dead
-        # reckoning from the DiffDrive plugin rather than true pose, but with
-        # no wheel slip in sim it is the best truth reference available.
+        # actual here is the sim's odometry
         self.odom_sub = self.create_subscription(
             Odometry,
             '/model/vehicle_blue/odometry',
@@ -119,13 +118,13 @@ class RobotController(Node):
         )
         self.error_pub = self.create_publisher(Float64, '/error', 10)
 
-        # Dead reckoned state in the odom frame. The robot spawns at the world
-        # origin and the IMU reports orientation relative to its own start, so
-        # the two frames coincide and need no startup offset.
+        # The robot spawns at the world origin and the IMU reports 
+        # orientation relative to its own start, so the two frames 
+        # coincide and need no startup offset.
         self.est_pos = [0.0, 0.0, 0.0]
         self.est_vel = [0.0, 0.0, 0.0]
         self.last_imu_stamp = None
-        self.latest_odom_pos = None
+        self.latest_odom_pos = None # note: sim's odom might refreshes at a diff time
 
         # ---- TASK 3: lidar in, filtered obstacles out ----------------------
         # The lidar has a single vertical sample, so this cloud is one flat
@@ -174,7 +173,7 @@ class RobotController(Node):
         self.latest_odom_pos = (p.x, p.y)
 
     def on_robot_pos(self, msg):
-        """Dead reckon position from the IMU and publish the error vs truth."""
+        """Double integrate position from the IMU and publish the error vs truth."""
         stamp = stamp_to_sec(msg.header.stamp)
         if self.last_imu_stamp is None:
             self.last_imu_stamp = stamp
