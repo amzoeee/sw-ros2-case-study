@@ -55,12 +55,7 @@ class RobotController(Node):
 
         # ---- TASK 1.3: the path you chose ----------------------------------
         # A single constant-curvature arc, open loop, turning toward -y.
-        #
-        # Why: driving +x hits the barrier at x = 6 (spans y -3..3), so the
-        # robot has to round one end; the pillar at (4, 2.5) makes +y the
-        # cluttered side. A diff drive holds an arc exactly when v and omega
-        # are constant, so this costs no per-step control effort, and chaining
-        # arcs (omega = 0 gives a straight) covers any longer route.
+        # - the pillar is located in +y 
         #
         # Why arc length, not time: curvature 1/R fixes the shape and
         # ARC_LENGTH fixes how far along it we go, both independent of speed.
@@ -68,8 +63,8 @@ class RobotController(Node):
         # a second segment would be needed to finish (radii that do both in
         # one arc span ~0.05 m, too brittle to tune).
         #
-        # Open loop: s += v * dt dead-reckons off our own command and ignores
-        # slip. TASK 2's odometry is what closes that gap.
+        # Open loop: s += v * dt is dead reckoning. 
+        # realistically should use odom, other sensor feedback... 
         self.path = {
             'radius': self.ARC_RADIUS,
             'turn_sign': self.TURN_SIGN,
@@ -131,8 +126,8 @@ class RobotController(Node):
 
             self.distance_travelled += self.LINEAR_SPEED * self.CMD_PERIOD
 
-        # Past ARC_LENGTH, cmd stays zeroed; keep publishing so the plugin
-        # never falls back on the last non-zero command.
+        # after distance is traveled, need to publish velocity 
+        #  of 0 to stop robot
         self.move_pub.publish(cmd)
 
     # -----------------------------------------------------------------------
