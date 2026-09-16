@@ -38,7 +38,7 @@ class RobotController(Node):
         # ---- TASK 1.2: publisher that drives the robot ---------------------
         # Which topic moves the robot? Find it first (TASK 1.1), then uncomment.
         #
-        # self.move_pub = self.create_publisher(Twist, '<TODO: topic name>', 10)
+        self.move_pub = self.create_publisher(Twist, '/cmd_vel', 10)
         #
         # Then drive it on a timer:
         # self.move_timer = self.create_timer(0.1, self.send_move_cmd)
