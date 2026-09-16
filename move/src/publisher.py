@@ -38,7 +38,7 @@ class RobotController(Node):
     ARC_RADIUS = 6.0        # [m] turning radius; smaller = tighter arc
     TURN_SIGN = -1.0        # -1 turns toward -y (away from the pillar at +2.5)
     LINEAR_SPEED = 0.5      # [m/s] forward speed along the arc
-    CMD_PERIOD = 0.1 * 1e9  # [ns] command period
+    CMD_PERIOD = 0.1        # [ns] command period
 
     def __init__(self):
         super().__init__('robot_controller')
