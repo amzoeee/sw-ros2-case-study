@@ -103,12 +103,12 @@ class RobotController(Node):
         # self.obstacle_pub = self.create_publisher(
         #     PointCloud2, '/obstacle_cloud', 10)
 
+        sweep_deg = math.degrees(self.ARC_LENGTH / self.ARC_RADIUS)
+        turn = 'right' if self.TURN_SIGN < 0 else 'left'
         self.get_logger().info(
-            'robot_controller started: driving a %.1f m arc of radius %.1f m '
-            '(%.0f deg, %s) at %.2f m/s',
-            self.ARC_LENGTH, self.ARC_RADIUS,
-            math.degrees(self.ARC_LENGTH / self.ARC_RADIUS),
-            'right' if self.TURN_SIGN < 0 else 'left', self.LINEAR_SPEED)
+            f'robot_controller started: {self.ARC_LENGTH:.1f} m arc, '
+            f'radius {self.ARC_RADIUS:.1f} m ({sweep_deg:.0f} deg {turn}) '
+            f'at {self.LINEAR_SPEED:.2f} m/s')
 
     # -----------------------------------------------------------------------
     # TASK 1.2 -- publish a velocity command
