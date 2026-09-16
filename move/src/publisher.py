@@ -179,7 +179,7 @@ class RobotController(Node):
             self.last_imu_stamp = stamp
             return
 
-        dt = stamp - self.last_imu_stamp
+        dt = stamp - self.last_imu_stamp # cannot rely on /imu to pub. at rate of exactly 1 hz 
         self.last_imu_stamp = stamp
         if dt <= 0.0:
             return
