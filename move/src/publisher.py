@@ -22,7 +22,7 @@ from rclpy.qos import qos_profile_sensor_data
 
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
-from sensor_msgs.msg import PointCloud2
+from sensor_msgs.msg import Imu, PointCloud2
 from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Float64
 
@@ -78,21 +78,34 @@ class RobotController(Node):
         self.segment_elapsed = 0.0
 
         # ---- TASK 2.2: subscriber for the robot's 6D pose ------------------
-        # One of the two onboard sensors reports 6D data. Find it (TASK 2.1).
-        #
-        # self.robot_pos_sub = self.create_subscription(
-        #     <TODO: msg type>,
-        #     '<TODO: topic name>',
-        #     self.on_robot_pos,
-        #     qos_profile_sensor_data,
-        # )
+        # /imu is the 6D sensor: 3-axis accelerometer + 3-axis gyro. It carries
+        # no position, so position is dead reckoned from it in on_robot_pos.
+        self.robot_pos_sub = self.create_subscription(
+            Imu,
+            '/imu',
+            self.on_robot_pos,
+            qos_profile_sensor_data,
+        )
 
         # ---- TASK 2.3: where the measured-vs-actual error goes -------------
-        # self.error_pub = self.create_publisher(Float64, '/error', 10)
-        #
-        # Hint: ground truth for "actual" is published by the simulator on the
-        # robot's odometry topic (nav_msgs/Odometry). Deciding what to compare,
-        # and in which frame, is part of the task.
+        # "actual" is the simulator's odometry. Strictly it is wheel dead
+        # reckoning from the DiffDrive plugin rather than true pose, but with
+        # no wheel slip in sim it is the best truth reference available.
+        self.odom_sub = self.create_subscription(
+            Odometry,
+            '/model/vehicle_blue/odometry',
+            self.on_odom,
+            10,
+        )
+        self.error_pub = self.create_publisher(Float64, '/error', 10)
+
+        # Dead reckoned state in the odom frame. The robot spawns at the world
+        # origin and the IMU reports orientation relative to its own start, so
+        # the two frames coincide and need no startup offset.
+        self.est_pos = [0.0, 0.0, 0.0]
+        self.est_vel = [0.0, 0.0, 0.0]
+        self.last_imu_stamp = None
+        self.latest_odom_pos = None
 
         # ---- TASK 3: lidar in, filtered obstacles out ----------------------
         # The lidar has a single vertical sample, so this cloud is one flat
@@ -135,14 +148,13 @@ class RobotController(Node):
     # -----------------------------------------------------------------------
     # TASK 2.3 -- compare reported position against ground truth
     # -----------------------------------------------------------------------
+    def on_odom(self, msg):
+        """Cache the latest ground truth position."""
+        p = msg.pose.pose.position
+        self.latest_odom_pos = (p.x, p.y)
+
     def on_robot_pos(self, msg):
-        """Compare the sensor's idea of where we are against the truth.
-
-        Publish a Float64 on self.error_pub when the delta exceeds
-        self.error_thresh.
-
-        TODO: decide what "delta" means here and justify it in a comment.
-        """
+        """Dead reckon position from the IMU and publish the error vs truth."""
         raise NotImplementedError('TASK 2.3')
 
     # -----------------------------------------------------------------------
