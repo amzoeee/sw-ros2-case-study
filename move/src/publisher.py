@@ -27,6 +27,22 @@ from sensor_msgs_py import point_cloud2
 from std_msgs.msg import Float64
 
 
+def stamp_to_sec(stamp):
+    """Flatten a builtin_interfaces/Time into float seconds."""
+    return stamp.sec + stamp.nanosec * 1e-9
+
+
+def rotate_by_quat(q, v):
+    """Rotate vector v by quaternion q (body frame -> world frame)."""
+    # v' = v + w * t + q_vec x t, where t = 2 * (q_vec x v)
+    tx = 2.0 * (q.y * v[2] - q.z * v[1])
+    ty = 2.0 * (q.z * v[0] - q.x * v[2])
+    tz = 2.0 * (q.x * v[1] - q.y * v[0])
+    return (v[0] + q.w * tx + q.y * tz - q.z * ty,
+            v[1] + q.w * ty + q.z * tx - q.x * tz,
+            v[2] + q.w * tz + q.x * ty - q.y * tx)
+
+
 class RobotController(Node):
     """Drives the robot, tracks its position error, and flags obstacles."""
 
@@ -43,11 +59,15 @@ class RobotController(Node):
     PIVOT_RATE = 0.5        # [rad/s] yaw rate of the in-place pivot
     CMD_PERIOD = 0.1        # [s] command period
 
+    # ---- TASK 2.3 constants -------------------------------------------------
+    GRAVITY = 9.8           # [m/s^2] SDF default, the world sets no <gravity>
+
     def __init__(self):
         super().__init__('robot_controller')
 
         # Publish to /error when the position delta exceeds this (TASK 2.3).
-        # This is a starting value -- justify whatever you settle on.
+        # 0.5 m is a quarter of the 2.0 m chassis: close enough that the robot
+        # is still roughly where we think it is, far enough to ignore noise.
         self.error_thresh = 0.5
 
         # ---- TASK 1.2: publisher that drives the robot ---------------------
@@ -155,7 +175,39 @@ class RobotController(Node):
 
     def on_robot_pos(self, msg):
         """Dead reckon position from the IMU and publish the error vs truth."""
-        raise NotImplementedError('TASK 2.3')
+        stamp = stamp_to_sec(msg.header.stamp)
+        if self.last_imu_stamp is None:
+            self.last_imu_stamp = stamp
+            return
+
+        dt = stamp - self.last_imu_stamp
+        self.last_imu_stamp = stamp
+        if dt <= 0.0:
+            return
+
+        # gz reports specific force, so a stationary IMU reads +g on its z
+        # axis. Rotate into the world frame and take gravity back out before
+        # anything gets integrated.
+        a = msg.linear_acceleration
+        acc = list(rotate_by_quat(msg.orientation, (a.x, a.y, a.z)))
+        acc[2] -= self.GRAVITY
+
+        # Constant acceleration over the interval. At the sensor's 1 Hz that
+        # assumption is coarse, and the resulting drift is what TASK 2 measures.
+        for i in range(3):
+            self.est_pos[i] += self.est_vel[i] * dt + 0.5 * acc[i] * dt * dt
+            self.est_vel[i] += acc[i] * dt
+
+        if self.latest_odom_pos is None:
+            return
+
+        # Planar distance: the robot is ground bound, so x-y carries the error
+        # that matters and fits the single Float64 the task asks for.
+        truth_x, truth_y = self.latest_odom_pos
+        delta = math.hypot(self.est_pos[0] - truth_x,
+                           self.est_pos[1] - truth_y)
+        if delta > self.error_thresh:
+            self.error_pub.publish(Float64(data=delta))
 
     # -----------------------------------------------------------------------
     # TASK 3.3 -- classify a single lidar point
