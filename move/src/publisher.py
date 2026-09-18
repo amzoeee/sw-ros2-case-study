@@ -56,8 +56,8 @@ class RobotController(Node):
     # past the barrier's -y end, and finishes at (2R, 0) heading +y along the
     # far face. 
     ARC_RADIUS = 4.5       # [m] half-circle radius
-    LINEAR_SPEED = 0.5      # [m/s] forward speed along the arc
-    PIVOT_RATE = 0.5        # [rad/s] yaw rate of the in-place pivot
+    LINEAR_SPEED = 2.0      # [m/s] forward speed along the arc
+    PIVOT_RATE = 1.0        # [rad/s] yaw rate of the in-place pivot
     CMD_PERIOD = 0.1        # [s] command period
 
     # ---- TASK 2.3 constants -------------------------------------------------
