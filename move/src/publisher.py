@@ -18,6 +18,7 @@ import math
 
 import rclpy
 from rclpy.node import Node
+from rclpy.parameter import Parameter
 from rclpy.qos import qos_profile_sensor_data
 
 from geometry_msgs.msg import Twist
@@ -64,6 +65,15 @@ class RobotController(Node):
 
     def __init__(self):
         super().__init__('robot_controller')
+
+        # The route is timed off the sim clock, so a host running at 0.5x real
+        # time drives the same path as one at 2.0x. The launch file passes
+        # use_sim_time; `ros2 run move publisher` does not, so force it before
+        # any timer exists or the route gets timed in wall seconds.
+        if not self.get_parameter('use_sim_time').value:
+            self.set_parameters(
+                [Parameter('use_sim_time', Parameter.Type.BOOL, True)])
+            self.get_logger().warn('use_sim_time was off -- forced on')
 
         # Publish to /error when the position delta exceeds this (TASK 2.3).
         # 1.0m is 1/2 of robot chassis length -- quite an error
