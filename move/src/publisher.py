@@ -66,10 +66,8 @@ class RobotController(Node):
     def __init__(self):
         super().__init__('robot_controller')
 
-        # The route is timed off the sim clock, so a host running at 0.5x real
-        # time drives the same path as one at 2.0x. The launch file passes
-        # use_sim_time; `ros2 run move publisher` does not, so force it before
-        # any timer exists or the route gets timed in wall seconds.
+        # ensure we are using sim time to time the path. 
+        # --> consisrency across diff. devices running diff. sims
         if not self.get_parameter('use_sim_time').value:
             self.set_parameters(
                 [Parameter('use_sim_time', Parameter.Type.BOOL, True)])
