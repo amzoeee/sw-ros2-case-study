@@ -95,9 +95,11 @@ class RobotController(Node):
         # unfortunately this is not very time efficient but 
         # its better that it works than it not working :) 
 
-        # vars needed to track execution (two segments). 
-        self.segment_index = 0
-        self.segment_elapsed = 0.0
+        # Route time is measured from the node's first tick, not from the sim
+        # clock's zero 
+        # Captured on the first callback because with use_sim_time the clock
+        # reads 0 until the first /clock message lands.
+        self.start_time = None
 
         # ---- TASK 2.2: subscriber for the robot's 6D pose ------------------
         # note /imu does not give position directly
@@ -151,18 +153,21 @@ class RobotController(Node):
     # -----------------------------------------------------------------------
     def send_move_cmd(self):
         """Publish one Twist for the current segment of self.path."""
+        now = self.get_clock().now().nanoseconds * 1e-9
+        if self.start_time is None:
+            self.start_time = now
+        elapsed = now - self.start_time
+
+        # Walk the segments to find the one this instant falls in. Reading the
+        # clock beats counting ticks: the timer can fire late and the segment
+        # boundaries still land where the path expects them.
         cmd = Twist()
-
-        # execute segment [0] then segment [1]
-        if self.segment_index < len(self.path):
-            linear, angular, duration = self.path[self.segment_index]
-            cmd.linear.x = linear
-            cmd.angular.z = angular
-
-            self.segment_elapsed += self.CMD_PERIOD
-            if self.segment_elapsed >= duration:
-                self.segment_index += 1
-                self.segment_elapsed = 0.0
+        for linear, angular, duration in self.path:
+            if elapsed < duration:
+                cmd.linear.x = linear
+                cmd.angular.z = angular
+                break
+            elapsed -= duration
 
         self.move_pub.publish(cmd)
 
