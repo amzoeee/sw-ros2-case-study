@@ -54,8 +54,8 @@ class RobotController(Node):
     #     (x, y) = R(1 + cos t), R sin t,   t: pi -> 2pi
     # It leaves (0, 0) heading -y along the near face, bottoms out at (R, -R)
     # past the barrier's -y end, and finishes at (2R, 0) heading +y along the
-    # far face. R = 5.0 keeps the path 4.8 m clear of the barrier's end.
-    ARC_RADIUS = 5.0        # [m] half-circle radius
+    # far face. 
+    ARC_RADIUS = 4.5       # [m] half-circle radius
     LINEAR_SPEED = 0.5      # [m/s] forward speed along the arc
     PIVOT_RATE = 0.5        # [rad/s] yaw rate of the in-place pivot
     CMD_PERIOD = 0.1        # [s] command period
