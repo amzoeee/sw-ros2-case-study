@@ -84,6 +84,8 @@ class RobotController(Node):
 
         # ---- TASK 1.2: publisher that drives the robot ---------------------
         self.move_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+
+        # note: to test lidar, comment out this line. 
         self.move_timer = self.create_timer(self.CMD_PERIOD, self.send_move_cmd)
 
         # ---- TASK 1.3: the path you chose ----------------------------------
