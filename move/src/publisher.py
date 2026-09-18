@@ -66,6 +66,11 @@ class RobotController(Node):
     # gz maps <laser_retro> to point intensity: the poles ship 2000, the
     # barrier 0, so anything well inside that gap separates them.
     OBSTACLE_INTENSITY = 100.0
+    # Beams diverge by 0.25 deg, so neighbours on one surface land ~2 cm apart
+    # at the ranges we care about. 0.25 m tolerates a few dropped beams without
+    # merging separate objects.
+    CLUSTER_GAP = 0.25      # [m]
+    MIN_CLUSTER_POINTS = 3  # a pole spans tens of beams; fewer is speckle
 
     def __init__(self):
         super().__init__('robot_controller')
@@ -234,7 +239,8 @@ class RobotController(Node):
     # -----------------------------------------------------------------------
     def on_lidar(self, msg):
         """Filter incoming points through is_obstacle and republish."""
-        keep = []
+        # Pass 1: per point gate.
+        hits = []
         for p in point_cloud2.read_points(
                 msg,
                 field_names=('x', 'y', 'z', 'intensity'),
@@ -246,7 +252,21 @@ class RobotController(Node):
             if not all(math.isfinite(v) for v in point[:3]):
                 continue
             if self.is_obstacle(point):
-                keep.append(point[:3])
+                hits.append(point[:3])
+
+        # Pass 2: the scan arrives in angular order and pass 1 preserves it, so
+        # one walk down the survivors segments them -- cut a cluster wherever
+        # consecutive points jump. No neighbour search needed.
+        keep = []
+        cluster = []
+        for point in hits:
+            if cluster and math.dist(point, cluster[-1]) > self.CLUSTER_GAP:
+                if len(cluster) >= self.MIN_CLUSTER_POINTS:
+                    keep.extend(cluster)
+                cluster = []
+            cluster.append(point)
+        if len(cluster) >= self.MIN_CLUSTER_POINTS:
+            keep.extend(cluster)
 
         self.obstacle_pub.publish(
             point_cloud2.create_cloud_xyz32(msg.header, keep))
