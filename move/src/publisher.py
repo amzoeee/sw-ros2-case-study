@@ -62,6 +62,11 @@ class RobotController(Node):
     # ---- TASK 2.3 constants -------------------------------------------------
     GRAVITY = 9.8           # [m/s^2] SDF default, the world sets no <gravity>
 
+    # ---- TASK 3 constants ---------------------------------------------------
+    # gz maps <laser_retro> to point intensity: the poles ship 2000, the
+    # barrier 0, so anything well inside that gap separates them.
+    OBSTACLE_INTENSITY = 100.0
+
     def __init__(self):
         super().__init__('robot_controller')
 
@@ -132,14 +137,14 @@ class RobotController(Node):
         # The lidar has a single vertical sample, so this cloud is one flat
         # row of points at the sensor's height -- not a 3D volume.
         #
-        # self.lidar_sub = self.create_subscription(
-        #     PointCloud2,
-        #     '/lidar/points',
-        #     self.on_lidar,
-        #     qos_profile_sensor_data,
-        # )
-        # self.obstacle_pub = self.create_publisher(
-        #     PointCloud2, '/obstacle_cloud', 10)
+        self.lidar_sub = self.create_subscription(
+            PointCloud2,
+            '/lidar/points',
+            self.on_lidar,
+            qos_profile_sensor_data,
+        )
+        self.obstacle_pub = self.create_publisher(
+            PointCloud2, '/obstacle_cloud', 10)
 
         self.get_logger().info(
             f'robot_controller started: pivot 90 deg right, then a '
@@ -217,25 +222,34 @@ class RobotController(Node):
         """Return True if `point` is something we must avoid.
 
         The barrier is passable -- treat it like dust in the air. The poles are
-        not. `point` is an (x, y, z) tuple in the lidar's frame.
+        not. `point` is an (x, y, z, intensity) tuple in the lidar's frame.
 
-        TODO: decide what separates a pole from the barrier and implement it.
+        Only the poles are retroreflective, so intensity is what tells the two
+        apart. Nothing about where they sit or how big they are is assumed.
         """
-        raise NotImplementedError('TASK 3.3')
+        return point[3] > self.OBSTACLE_INTENSITY
 
     # -----------------------------------------------------------------------
     # TASK 3.2 -- filter the scan and republish what matters
     # -----------------------------------------------------------------------
     def on_lidar(self, msg):
-        """Filter incoming points through is_obstacle and republish.
+        """Filter incoming points through is_obstacle and republish."""
+        keep = []
+        for p in point_cloud2.read_points(
+                msg,
+                field_names=('x', 'y', 'z', 'intensity'),
+                skip_nans=True):
+            # read_points hands back numpy records, so flatten to plain floats.
+            point = (float(p[0]), float(p[1]), float(p[2]), float(p[3]))
+            # Beams that hit nothing come back inf, which poisons anything
+            # downstream that tries to do arithmetic on the cloud.
+            if not all(math.isfinite(v) for v in point[:3]):
+                continue
+            if self.is_obstacle(point):
+                keep.append(point[:3])
 
-        point_cloud2.read_points(msg, field_names=('x', 'y', 'z')) iterates the
-        cloud; point_cloud2.create_cloud_xyz32(msg.header, pts) builds the
-        outgoing one.
-
-        TODO: keep only the obstacle points and publish on self.obstacle_pub.
-        """
-        raise NotImplementedError('TASK 3.2')
+        self.obstacle_pub.publish(
+            point_cloud2.create_cloud_xyz32(msg.header, keep))
 
 
 def main(args=None):
