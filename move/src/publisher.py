@@ -240,18 +240,25 @@ class RobotController(Node):
     # -----------------------------------------------------------------------
     def is_obstacle(self, point):
         """Return True if `point` is something we must avoid.
-
-        The barrier is passable -- treat it like dust in the air. The poles are
-        not. `point` is an (x, y, z, intensity) tuple in the lidar's frame.
-
-        Only the poles are retroreflective, so intensity is what tells the two
-        apart. Nothing about where they sit or how big they are is assumed.
+        note `point` is an (x, y, z, intensity) tuple in the lidar's frame.
+        Only the poles are retroreflective, so we use intensity to determine
+        whether a point is an obstacle or not
         """
         return point[3] > self.OBSTACLE_INTENSITY
 
     # -----------------------------------------------------------------------
     # TASK 3.2 -- filter the scan and republish what matters
     # -----------------------------------------------------------------------
+    # rationale:
+    # 1st pass: filter based on intensity
+    # wall is not retroreflective. use an intensity threshold to filter out 
+    # both the wall and noise. 
+
+    # 2nd pass: filter based on cluster
+    # only count points as being in an obstacle if it is part of a
+    # sufficiently large cluster. 
+
+
     def on_lidar(self, msg):
         """Filter incoming points through is_obstacle and republish."""
         # Pass 1: per point gate.
